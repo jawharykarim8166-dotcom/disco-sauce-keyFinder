@@ -1,0 +1,52 @@
+name: Build Disco Sauce Key Finder (Windows VST3)
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        juce: [ '7.0.12', '8.0.12', '8.0.8' ]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare CMake file
+        shell: pwsh
+        run: |
+          (Get-Content CMakeLists.txt) -replace 'GIT_TAG 7.0.12', 'GIT_TAG ${{ matrix.juce }}' | Set-Content CMakeLists.txt
+          Get-Content CMakeLists.txt | Select-String 'GIT_TAG' | Tee-Object -FilePath tree.txt
+          cmake --version 2>&1 | Tee-Object -FilePath tree.txt -Append
+
+      - name: Configure
+        shell: pwsh
+        run: |
+          cmake -S . -B build -A x64 "-DCMAKE_POLICY_VERSION_MINIMUM=3.5" 2>&1 | Tee-Object -FilePath configure-log.txt
+
+      - name: Build
+        shell: pwsh
+        run: |
+          cmake --build build --config Release --parallel 2>&1 | Tee-Object -FilePath build-log.txt
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs-${{ matrix.juce }}
+          path: |
+            tree.txt
+            configure-log.txt
+            build-log.txt
+          if-no-files-found: ignore
+
+      - name: Upload plugin
+        uses: actions/upload-artifact@v4
+        with:
+          name: DiscoSauceKeyFinder-Windows-JUCE-${{ matrix.juce }}
+          path: |
+            build/DiscoSauceSplitt_artefacts/Release/VST3
+            build/DiscoSauceSplitt_artefacts/Release/Standalone
